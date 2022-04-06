@@ -133,6 +133,19 @@ void _writeCodecSource(Indent indent, Api api, Root root) {
   }
 }
 
+void _writeException(Indent indent) {
+  indent.format('''
+class FlutterException : public std::exception {
+ public:
+ \tFlutterException(std::string message) : message_(message){};
+ \tconst char* what() const throw() { return message_.c_str(); }
+
+ private:
+ \tstd::string message_;
+};
+''');
+}
+
 void _writeErrorOr(Indent indent) {
   indent.format('''
 class FlutterError {
@@ -219,7 +232,7 @@ void _writeHostApiHeader(Indent indent, Api api) {
 
 void _writeHostApiSource(Indent indent, Api api) {
   assert(api.location == ApiLocation.host);
-
+/*
   final String codecName = _getCodecName(api);
   indent.format('''
 /** The codec used by ${api.name}. */
@@ -227,6 +240,7 @@ const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
 \treturn flutter::StandardMessageCodec::GetInstance(&$codecName::GetInstance());
 }
 ''');
+*/
   indent.writeln(
       '/** Sets up an instance of `${api.name}` to handle messages through the `binary_messenger`. */');
   indent.write(
@@ -240,7 +254,8 @@ const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
             'auto channel = std::make_unique<flutter::BasicMessageChannel<flutter::EncodableValue>>(');
         indent.inc();
         indent.inc();
-        indent.writeln('binary_messenger, "$channelName", &GetCodec());');
+        indent.writeln(
+            'binary_messenger, "$channelName", &flutter::StandardMessageCodec::GetInstance());');
         indent.dec();
         indent.dec();
         indent.write('if (api != nullptr) ');
@@ -269,7 +284,7 @@ const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
                     indent.write('if ($encodableArgName.IsNull()) ');
                     indent.scoped('{', '}', () {
                       indent.writeln(
-                          'throw std::exception("$argName unexpectedly null.");');
+                          'throw FlutterException("$argName unexpectedly null.");');
                     });
                   }
                   indent.writeln(
@@ -303,7 +318,7 @@ const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
               if (method.isAsynchronous) {
                 methodArgument.add(
                   '[&wrapped, &reply]($returnTypeName output) { ${indent.newline}'
-                  '${_wrapResponse('\t\treply(wrapped); ${indent.newline}', method.returnType.isVoid)}'
+                  '${_wrapResponse('\t\treply(flutter::EncodableValue(wrapped)); ${indent.newline}', method.returnType.isVoid)}'
                   '}',
                 );
               }
@@ -321,11 +336,11 @@ const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
               indent.writeln(
                   'wrapped.insert(std::make_pair(flutter::EncodableValue("${Keys.error}"), WrapError(exception)));');
               if (method.isAsynchronous) {
-                indent.writeln('reply(wrapped);');
+                indent.writeln('reply(flutter::EncodableValue(wrapped));');
               }
             });
             if (!method.isAsynchronous) {
-              indent.writeln('reply(wrapped);');
+              indent.writeln('reply(flutter::EncodableValue(wrapped));');
             }
           });
         });
@@ -390,12 +405,14 @@ void _writeFlutterApiSource(Indent indent, Api api) {
     indent.writeln('this->binary_messenger_ = binary_messenger;');
   });
   indent.writeln('');
+/*
   final String codecName = _getCodecName(api);
   indent.format('''
 const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
 \treturn flutter::StandardMessageCodec::GetInstance(&$codecName::GetInstance());
 }
 ''');
+*/
   for (final Method func in api.methods) {
     final String channelName = makeChannelName(api, func);
     final String returnType = func.returnType.isVoid
@@ -424,7 +441,8 @@ const flutter::StandardMessageCodec& ${api.name}::GetCodec() {
           'auto channel = std::make_unique<flutter::BasicMessageChannel<flutter::EncodableValue>>(');
       indent.inc();
       indent.inc();
-      indent.writeln('binary_messenger_, "$channelName", &GetCodec());');
+      indent.writeln(
+          'binary_messenger_, "$channelName", &flutter::StandardMessageCodec::GetInstance());');
       indent.dec();
       indent.dec();
       indent.write(
@@ -583,6 +601,8 @@ void generateCppHeader(
   indent.addln('');
 
   _writeErrorOr(indent);
+  indent.addln('');
+  _writeException(indent);
 
   for (final Class klass in root.classes) {
     indent.addln('');
@@ -631,7 +651,7 @@ void generateCppHeader(
   }
 
   for (final Api api in root.apis) {
-    _writeCodecHeader(indent, api, root);
+    //_writeCodecHeader(indent, api, root);
     indent.addln('');
     if (api.location == ApiLocation.host) {
       _writeHostApiHeader(indent, api);
@@ -761,7 +781,7 @@ else if (const int64_t* ${pointerFieldName}_64 = std::get_if<int64_t>(&$encodabl
   }
 
   for (final Api api in root.apis) {
-    _writeCodecSource(indent, api, root);
+    //_writeCodecSource(indent, api, root);
     indent.addln('');
     if (api.location == ApiLocation.host) {
       _writeHostApiSource(indent, api);
