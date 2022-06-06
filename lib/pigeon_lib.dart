@@ -231,10 +231,11 @@ class PigeonOptions {
       javaOptions: map.containsKey('javaOptions')
           ? JavaOptions.fromMap((map['javaOptions'] as Map<String, Object>?)!)
           : null,
-      cppHeaderOut: map['cppHeaderOut'] as String?,
-      cppSourceOut: map['cppSourceOut'] as String?,
-      cppOptions: map.containsKey('cppOptions')
-          ? CppOptions.fromMap((map['cppOptions'] as Map<String, Object>?)!)
+      cppHeaderOut: map['experimental_cppHeaderOut'] as String?,
+      cppSourceOut: map['experimental_cppSourceOut'] as String?,
+      cppOptions: map.containsKey('experimental_cppOptions')
+          ? CppOptions.fromMap(
+              (map['experimental_cppOptions'] as Map<String, Object>?)!)
           : null,
       dartOptions: map.containsKey('dartOptions')
           ? DartOptions.fromMap((map['dartOptions'] as Map<String, Object>?)!)
@@ -258,9 +259,9 @@ class PigeonOptions {
       if (objcOptions != null) 'objcOptions': objcOptions!.toMap(),
       if (javaOut != null) 'javaOut': javaOut!,
       if (javaOptions != null) 'javaOptions': javaOptions!.toMap(),
-      if (cppHeaderOut != null) 'cppHeaderOut': cppHeaderOut!,
-      if (cppSourceOut != null) 'cppSourceOut': cppSourceOut!,
-      if (cppOptions != null) 'cppOptions': cppOptions!.toMap(),
+      if (cppHeaderOut != null) 'experimental_cppHeaderOut': cppHeaderOut!,
+      if (cppSourceOut != null) 'experimental_cppSourceOut': cppSourceOut!,
+      if (cppOptions != null) 'experimental_cppOptions': cppOptions!.toMap(),
       if (dartOptions != null) 'dartOptions': dartOptions!.toMap(),
       if (copyrightHeader != null) 'copyrightHeader': copyrightHeader!,
       if (astOut != null) 'astOut': astOut!,
@@ -335,6 +336,10 @@ abstract class Generator {
   /// Write the generated code described in [root] to [sink] using the
   /// [options].
   void generate(StringSink sink, PigeonOptions options, Root root);
+
+  /// Generates errors that would only be appropriate for this [Generator]. For
+  /// example, maybe a certain feature isn't implemented in a [Generator] yet.
+  List<Error> validate(PigeonOptions options, Root root);
 }
 
 DartOptions _dartOptionsWithCopyrightHeader(
@@ -357,6 +362,9 @@ class AstGenerator implements Generator {
 
   @override
   IOSink? shouldGenerate(PigeonOptions options) => _openSink(options.astOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) => <Error>[];
 }
 
 /// A [Generator] that generates Dart source code.
@@ -373,6 +381,9 @@ class DartGenerator implements Generator {
 
   @override
   IOSink? shouldGenerate(PigeonOptions options) => _openSink(options.dartOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) => <Error>[];
 }
 
 /// A [Generator] that generates Dart test source code.
@@ -404,6 +415,9 @@ class DartTestGenerator implements Generator {
       return null;
     }
   }
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) => <Error>[];
 }
 
 /// A [Generator] that generates Objective-C header code.
@@ -424,6 +438,10 @@ class ObjcHeaderGenerator implements Generator {
   @override
   IOSink? shouldGenerate(PigeonOptions options) =>
       _openSink(options.objcHeaderOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) =>
+      validateObjc(options.objcOptions!, root);
 }
 
 /// A [Generator] that generates Objective-C source code.
@@ -444,6 +462,9 @@ class ObjcSourceGenerator implements Generator {
   @override
   IOSink? shouldGenerate(PigeonOptions options) =>
       _openSink(options.objcSourceOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) => <Error>[];
 }
 
 /// A [Generator] that generates Java source code.
@@ -465,6 +486,9 @@ class JavaGenerator implements Generator {
 
   @override
   IOSink? shouldGenerate(PigeonOptions options) => _openSink(options.javaOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) => <Error>[];
 }
 
 /// A [Generator] that generates C++ header code.
@@ -486,6 +510,10 @@ class CppHeaderGenerator implements Generator {
   @override
   IOSink? shouldGenerate(PigeonOptions options) =>
       _openSink(options.cppHeaderOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) =>
+      validateCpp(options.cppOptions!, root);
 }
 
 /// A [Generator] that generates C++ source code.
@@ -506,6 +534,9 @@ class CppSourceGenerator implements Generator {
   @override
   IOSink? shouldGenerate(PigeonOptions options) =>
       _openSink(options.cppSourceOut);
+
+  @override
+  List<Error> validate(PigeonOptions options, Root root) => <Error>[];
 }
 
 dart_ast.Annotation? _findMetadata(
@@ -563,12 +594,13 @@ List<Error> _validateAst(Root root, String source) {
   }
   for (final Api api in root.apis) {
     for (final Method method in api.methods) {
-      if (method.arguments.isNotEmpty &&
+      if (api.location == ApiLocation.flutter &&
+          method.arguments.isNotEmpty &&
           method.arguments.any((NamedType element) =>
               customEnums.contains(element.type.baseName))) {
         result.add(Error(
           message:
-              'Enums aren\'t yet supported for primitive arguments: "${method.arguments[0]}" in API: "${api.name}" method: "${method.name}" (https://github.com/flutter/flutter/issues/87307)',
+              'Enums aren\'t yet supported for primitive arguments in FlutterApis: "${method.arguments[0]}" in API: "${api.name}" method: "${method.name}" (https://github.com/flutter/flutter/issues/87307)',
           lineNumber: _calculateLineNumberNullable(source, method.offset),
         ));
       }
@@ -1103,15 +1135,12 @@ options:
     ..addOption('java_out', help: 'Path to generated Java file (.java).')
     ..addOption('java_package',
         help: 'The package that generated Java code will be in.')
-    ..addOption('cpp_header_out',
+    ..addOption('experimental_cpp_header_out',
         help: 'Path to generated C++ header file (.h). (experimental)')
-    ..addOption('cpp_source_out',
+    ..addOption('experimental_cpp_source_out',
         help: 'Path to generated C++ classes file (.cpp). (experimental)')
     ..addOption('cpp_namespace',
         help: 'The namespace that generated C++ code will be in.')
-    ..addFlag('dart_null_safety',
-        help: 'Makes generated Dart code have null safety annotations',
-        defaultsTo: true)
     ..addOption('objc_header_out',
         help: 'Path to generated Objective-C header file (.h).')
     ..addOption('objc_prefix',
@@ -1150,13 +1179,10 @@ options:
       javaOptions: JavaOptions(
         package: results['java_package'],
       ),
-      cppHeaderOut: results['cpp_header_out'],
-      cppSourceOut: results['cpp_source_out'],
+      cppHeaderOut: results['experimental_cpp_header_out'],
+      cppSourceOut: results['experimental_cpp_source_out'],
       cppOptions: CppOptions(
         namespace: results['cpp_namespace'],
-      ),
-      dartOptions: DartOptions(
-        isNullSafe: results['dart_null_safety'],
       ),
       copyrightHeader: results['copyright_header'],
       oneLanguage: results['one_language'],
@@ -1217,16 +1243,25 @@ options:
     final ParseResults parseResults =
         pigeon.parseFile(options.input!, sdkPath: sdkPath);
 
-    if (parseResults.errors.isNotEmpty) {
-      final List<Error> errors = <Error>[];
-      for (final Error err in parseResults.errors) {
-        errors.add(Error(
-            message: err.message,
-            filename: options.input,
-            lineNumber: err.lineNumber));
-      }
+    final List<Error> errors = <Error>[];
+    errors.addAll(parseResults.errors);
 
-      printErrors(errors);
+    for (final Generator generator in safeGenerators) {
+      final IOSink? sink = generator.shouldGenerate(options);
+      if (sink != null) {
+        final List<Error> generatorErrors =
+            generator.validate(options, parseResults.root);
+        errors.addAll(generatorErrors);
+      }
+    }
+
+    if (errors.isNotEmpty) {
+      printErrors(errors
+          .map((Error err) => Error(
+              message: err.message,
+              filename: options.input,
+              lineNumber: err.lineNumber))
+          .toList());
       return 1;
     }
 

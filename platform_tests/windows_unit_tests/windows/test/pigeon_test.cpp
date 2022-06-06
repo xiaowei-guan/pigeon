@@ -20,6 +20,7 @@ namespace {
 
 using flutter::EncodableMap;
 using flutter::EncodableValue;
+using ::testing::ByMove;
 using ::testing::DoAll;
 using ::testing::Pointee;
 using ::testing::Return;
@@ -28,6 +29,8 @@ using namespace messageTest;
 
 class MockMethodResult : public flutter::MethodResult<> {
  public:
+  ~MockMethodResult() = default;
+
   MOCK_METHOD(void, SuccessInternal, (const EncodableValue* result),
               (override));
   MOCK_METHOD(void, ErrorInternal,
@@ -39,6 +42,8 @@ class MockMethodResult : public flutter::MethodResult<> {
 
 class MockBinaryMessenger : public flutter::BinaryMessenger {
  public:
+  ~MockBinaryMessenger() = default;
+
   MOCK_METHOD(void, Send,
               (const std::string& channel, const uint8_t* message,
                size_t message_size, flutter::BinaryReply reply),
@@ -51,8 +56,11 @@ class MockBinaryMessenger : public flutter::BinaryMessenger {
 
 class MockApi : public Api {
  public:
-  MOCK_METHOD(std::optional<FlutterError>, initialize, (), (override));
-  MOCK_METHOD(ErrorOr<SearchReply>, search, (const SearchRequest&), (override));
+  ~MockApi() = default;
+
+  MOCK_METHOD(std::optional<FlutterError>, Initialize, (), (override));
+  MOCK_METHOD(ErrorOr<std::unique_ptr<SearchReply>>, Search,
+              (const SearchRequest&), (override));
 };
 
 class Writer : public flutter::ByteStreamWriter {
@@ -96,7 +104,7 @@ TEST(PigeonTests, CallInitialize) {
   EXPECT_CALL(mock_messenger,
               SetMessageHandler("dev.flutter.pigeon.Api.search", testing::_))
       .Times(1);
-  EXPECT_CALL(mock_api, initialize());
+  EXPECT_CALL(mock_api, Initialize());
   Api::SetUp(&mock_messenger, &mock_api);
   bool did_call_reply = false;
   flutter::BinaryReply reply = [&did_call_reply](const uint8_t* data,
@@ -119,7 +127,9 @@ TEST(PigeonTests, CallSearch) {
               SetMessageHandler("dev.flutter.pigeon.Api.search", testing::_))
       .Times(1)
       .WillOnce(testing::SaveArg<1>(&handler));
-  EXPECT_CALL(mock_api, search(testing::_));
+  EXPECT_CALL(mock_api, Search(testing::_))
+      .WillOnce(Return(ByMove(ErrorOr<SearchReply>::MakeWithUniquePtr(
+          std::make_unique<SearchReply>()))));
   Api::SetUp(&mock_messenger, &mock_api);
   bool did_call_reply = false;
   flutter::BinaryReply reply = [&did_call_reply](const uint8_t* data,

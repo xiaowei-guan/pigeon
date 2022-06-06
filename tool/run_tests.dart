@@ -5,7 +5,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// Script for executing the Pigeon tests
 ///
-/// usage: pub run pigeon:run_tests
+/// usage: dart run tool/run_tests.dart
 ////////////////////////////////////////////////////////////////////////////////
 import 'dart:io' show File, Process, Platform, exit, stderr, stdout;
 import 'package:args/args.dart';
@@ -210,7 +210,6 @@ Future<int> _runPigeon(
     bool streamOutput = true}) async {
   const bool hasDart = false;
   final List<String> args = <String>[
-    'pub',
     'run',
     'pigeon',
     '--input',
@@ -220,13 +219,13 @@ Future<int> _runPigeon(
   ];
   if (cppHeaderOut != null) {
     args.addAll(<String>[
-      '--cpp_header_out',
+      '--experimental_cpp_header_out',
       cppHeaderOut,
     ]);
   }
   if (cppSourceOut != null) {
     args.addAll(<String>[
-      '--cpp_source_out',
+      '--experimental_cpp_source_out',
       cppSourceOut,
     ]);
   }
@@ -271,7 +270,8 @@ Future<int> _runWindowsUnitTests() async {
     'host2flutter',
     'list',
     'multiple_arity',
-    'non_null_fields',
+    // Removed until supported by C++ generator.
+    // 'non_null_fields',
     'nullable_returns',
     'primitive',
     'void_arg_flutter',
@@ -328,7 +328,7 @@ Future<void> main(List<String> args) async {
   } else if (argResults.wasParsed('help')) {
     print('''
 Pigeon run_tests
-usage: pub run pigeon:run_tests [-l | -t <test name>]
+usage: dart run tool/run_tests.dart [-l | -t <test name>]
 
 ${parser.usage}''');
     exit(0);
